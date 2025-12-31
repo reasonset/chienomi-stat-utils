@@ -19,15 +19,24 @@ LogRecord = Struct.new(
 module Parser
   def self.parse log
     records = []
+    known_record = Set.new
 
     log.each do |line|
       if %r#(?<host>\S+)\s+(?<identity>\S+)\s+(?<user>\S+)\s+\[(?<time>.*?)\]\s+"(?:(?<method>\S+)\s+)?(?<resource>.*?)?(?:\s+(?<version>HTTP/[\d.]+)?)?"\s+(?<status>\d+)\s+(?<bytes>\d+)\s+"(?<referer>.*?)"\s+"(?<ua>.*)"# =~ line
+        ts = Time.strptime(time, '%d/%b/%Y:%H:%M:%S %z')
+        rst = [ts.to_i.to_s,host,resource,ua].join(":")
+        if known_record.include?(rst)
+          #$stderr.puts rst
+          next
+        end
+        known_record.add(rst)
+
         records.push LogRecord.new(
-          host, identity, user, Time.strptime(time, '%d/%b/%Y:%H:%M:%S %z'), method, resource, version, status.to_i, bytes.to_i, referer, ua
+          host, identity, user, ts, method, resource, version, status.to_i, bytes.to_i, referer, ua
         )
 
         if records.length % 100000 == 0
-          STDERR.puts records.length
+          $stderr.puts records.length
         end
       elsif /^\s+$/ =~ line
         next
@@ -36,7 +45,8 @@ module Parser
       end
     end
 
-    records
+    $stderr.puts "SORTING..."
+    records.sort_by {|i| i.time }
   end
 
   def self.exclude_bots logs
